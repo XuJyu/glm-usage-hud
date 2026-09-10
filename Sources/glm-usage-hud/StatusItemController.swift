@@ -21,8 +21,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var timer: Timer?
     private var settingsWindow: SettingsWindowController?
 
+    private static let refreshChoices = [5, 10, 15]
+    private static let refreshDefaultsKey = "refreshIntervalMinutes"
+    private var refreshMinutes = 15
+
     /// 从 AppDelegate 显式调用（避免在 init 里触发状态副作用）。
     func start() {
+        loadRefreshPreference()
         let menu = NSMenu()
         menu.delegate = self
         menu.autoenablesItems = false
@@ -144,6 +149,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+        menu.addItem(refreshIntervalItem())
         menu.addItem(autoLaunchItem())
         menu.addItem(.separator())
         menu.addItem(actionItem("退出", action: #selector(quit), keyEquivalent: "q"))
@@ -209,12 +215,40 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     // MARK: - 刷新调度
 
-    /// 15 分钟定时；Timer 强持有 self（target-action 版），控制器与应用同生命周期。
+    private func loadRefreshPreference() {
+        let stored = UserDefaults.standard.integer(forKey: Self.refreshDefaultsKey)
+        refreshMinutes = Self.refreshChoices.contains(stored) ? stored : 15
+    }
+
+    /// 定时刷新；Timer 强持有 self（target-action 版），控制器与应用同生命周期。
     private func startTimer() {
-        let timer = Timer(timeInterval: 15 * 60, target: self, selector: #selector(timerFire), userInfo: nil, repeats: true)
+        timer?.invalidate()
+        let timer = Timer(timeInterval: TimeInterval(refreshMinutes * 60), target: self, selector: #selector(timerFire), userInfo: nil, repeats: true)
         timer.tolerance = 60
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
+    }
+
+    private func refreshIntervalItem() -> NSMenuItem {
+        let submenu = NSMenu(title: "刷新频率")
+        submenu.autoenablesItems = false
+        for choice in Self.refreshChoices {
+            let item = NSMenuItem(title: "\(choice) 分钟", action: #selector(setRefreshInterval(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = choice
+            item.state = choice == refreshMinutes ? .on : .off
+            submenu.addItem(item)
+        }
+        let parent = NSMenuItem(title: "刷新频率", action: nil, keyEquivalent: "")
+        parent.submenu = submenu
+        return parent
+    }
+
+    @objc private func setRefreshInterval(_ sender: NSMenuItem) {
+        guard let minutes = sender.representedObject as? Int, Self.refreshChoices.contains(minutes) else { return }
+        refreshMinutes = minutes
+        UserDefaults.standard.set(minutes, forKey: Self.refreshDefaultsKey)
+        startTimer()
     }
 
     private func observeWake() {
