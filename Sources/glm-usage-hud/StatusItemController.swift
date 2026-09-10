@@ -64,12 +64,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     private func setRing(_ filledPercent: Int?) {
-        guard let button = statusItem.button else { return }
-        button.image = filledPercent.map(Self.ringImage(filledPercent:))
+        statusItem.button?.image = filledPercent.map(Self.ringImage(filledPercent:))
     }
 
     /// 5 小时用量圆环：模板图像（track α0.22 + 进度弧 α1.0），自动适配亮/暗外观。
     /// 12 点方向起顺时针，sweep 与已用% 成正比；>0 时至少露出 4°。
+    /// 用 drawingHandler 矢量绘制（lockFocus 已弃用且混合 DPI 下会发虚），按目标屏 scale 恒清晰。
     private static func ringImage(filledPercent: Int) -> NSImage {
         let diameter: CGFloat = 16
         let lineWidth: CGFloat = 2.5
@@ -77,23 +77,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let radius = (diameter - lineWidth) / 2
         let clamped = min(max(filledPercent, 0), 100)
         let sweep = clamped == 0 ? 0 : max(Double(clamped) / 100 * 360, 4)
-        let image = NSImage(size: NSSize(width: diameter, height: diameter))
-        image.isTemplate = true
-        image.lockFocus()
-        NSColor.black.withAlphaComponent(0.22).setStroke()
-        let track = NSBezierPath()
-        track.lineWidth = lineWidth
-        track.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
-        track.stroke()
-        if sweep > 0 {
-            NSColor.black.setStroke()
-            let arc = NSBezierPath()
-            arc.lineWidth = lineWidth
-            arc.lineCapStyle = .round
-            arc.appendArc(withCenter: center, radius: radius, startAngle: 90, endAngle: 90 - sweep, clockwise: true)
-            arc.stroke()
+        let image = NSImage(size: NSSize(width: diameter, height: diameter), flipped: false) { _ in
+            NSColor.black.withAlphaComponent(0.22).setStroke()
+            let track = NSBezierPath()
+            track.lineWidth = lineWidth
+            track.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
+            track.stroke()
+            if sweep > 0 {
+                NSColor.black.setStroke()
+                let arc = NSBezierPath()
+                arc.lineWidth = lineWidth
+                arc.lineCapStyle = .round
+                arc.appendArc(withCenter: center, radius: radius, startAngle: 90, endAngle: 90 - sweep, clockwise: true)
+                arc.stroke()
+            }
+            return true
         }
-        image.unlockFocus()
+        image.isTemplate = true
         return image
     }
 
